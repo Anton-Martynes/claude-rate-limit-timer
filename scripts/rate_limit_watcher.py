@@ -71,6 +71,28 @@ ENCOURAGING_MESSAGES = [
     "📈  Every line of code you write is a step toward mastery. Keep stepping.",
 ]
 
+# ── Les Podervianskyi-style session-start taunts ──────────────────────────────
+# Shown at session start when the rate limit hasn't been hit yet.
+# Inspired by the sardonic, absurdist, fearlessly provocative spirit of
+# the great Ukrainian playwright Lес Подерв'янський.
+PODORVIANSKYI_MESSAGES = [
+    "Слухай, ти ще навіть не накосячив по-справжньому. Що це за робота взагалі?",
+    "Ти ще не впер у ліміти? Або ти геній, або ти ще не починав. З тебе видно, що друге.",
+    "Ліміти ще чисті, як твоя совість перед дедлайном. Насолоджуйся, бо надовго не вистачить.",
+    "О, новий день, новий клоун перед терміналом. Вперед, синку. Ліміти самі себе не з'їдять.",
+    "Ти ще не вгатив у rate limit? Ганьба. Серйозні люди роблять це до обіду.",
+    "Привіт, трудівнику. Ліміти поки що нетронуті. Це або добре, або дуже підозріло.",
+    "Знаєш, я бачив людей, які писали код. Деякі навіть доводили до rate limit. Ти поки що не з них.",
+    "Знову ти. Ну давай, давай. Ліміти не нескінченні, але терпіння в мене — взагалі ні.",
+    "О, ти вирішив попрацювати. Хороша спроба. Подивимось, чи вистачить у тебе запалу до першого 429.",
+    "Ліміти поки мовчать. Як і твій прогрес, схоже. Вперед, не соромся.",
+    "Ти запустив сесію. Молодець. Тепер зроби щось, щоб API захотів від тебе відпочити.",
+    "Усе тихо. Ліміти не тронуті. Або ти дуже акуратний, або ще нічого не зробив. Обидва варіанти — погані.",
+    "Ну шо, знову кодити прийшов? Давай, я слідкую. Ліміти теж чекають свого зірного часу.",
+    "Запам'ятай: rate limit — це не помилка. Це медаль за те, що ти хоча б щось робив.",
+    "Добрий ранок. Або вечір. Або ніч. Ти виглядаєш однаково в будь-який час — злегка загублений.",
+]
+
 
 def _matches_rate_limit(text: str) -> bool:
     if not text:
@@ -281,6 +303,20 @@ def handle_failure(data: dict) -> None:
     # Claude Code will automatically retry the tool after the hook returns.
 
 
+def handle_session_start(_data: dict) -> None:
+    """
+    Hook: SessionStart
+    Fires when a new session begins — before any rate limit has been hit.
+    Greets the user with a sardonic Podervianskyi-style taunt.
+    """
+    import random
+    msg = random.choice(PODORVIANSKYI_MESSAGES)
+    sys.stderr.write(
+        f"\n{BOLD}{MAGENTA}🎭  {msg}{RESET}\n\n"
+    )
+    sys.stderr.flush()
+
+
 def main() -> None:
     hook_type = (sys.argv[1] if len(sys.argv) > 1 else "stop").lower()
 
@@ -296,6 +332,8 @@ def main() -> None:
         handle_notification(data)
     elif hook_type == "failure":
         handle_failure(data)
+    elif hook_type == "session_start":
+        handle_session_start(data)
     else:
         # Unknown hook — do nothing
         sys.exit(0)
