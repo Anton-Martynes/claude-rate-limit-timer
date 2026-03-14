@@ -1,0 +1,30 @@
+{
+  "name": "claude-rate-limit-timer",
+  "version": "1.0.0",
+  "description": "Claude Code plugin — countdown timer for API rate limits with auto-resume",
+  "keywords": [
+    "claude",
+    "claude-code",
+    "anthropic",
+    "plugin",
+    "rate-limit",
+    "cli"
+  ],
+  "license": "MIT",
+  "bin": {
+    "claude-rate-limit-timer": "bin/cli.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  },
+  "files": [
+    ".claude-plugin/",
+    "bin/",
+    "hooks/",
+    "scripts/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16"
+  }
+}

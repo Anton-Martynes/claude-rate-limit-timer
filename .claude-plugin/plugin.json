@@ -1,0 +1,8 @@
+{
+  "name": "rate-limit-timer",
+  "description": "Shows a countdown timer when Claude Code hits API rate limits, then automatically resumes your command",
+  "version": "1.0.0",
+  "author": {
+    "name": "Anton"
+  }
+}
