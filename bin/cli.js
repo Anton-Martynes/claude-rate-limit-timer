@@ -8,25 +8,32 @@
  *   claude-rate-limit-timer install [--scope user|project]
  *   claude-rate-limit-timer uninstall
  *   claude-rate-limit-timer status
+ *
+ * Instead of relying on `claude plugin install` (marketplace-only),
+ * we write directly to Claude Code's settings.json using the
+ * pluginDirectories field — the same mechanism as --plugin-dir.
  */
 
-const { execSync, spawnSync } = require("child_process");
+const { spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── constants ─────────────────────────────────────────────────────────────────
 
 const PLUGIN_NAME = "rate-limit-timer";
-const PLUGIN_ROOT = path.join(__dirname, "..");
+const PLUGIN_ROOT = path.resolve(path.join(__dirname, ".."));
 
 const C = {
-  reset:   "\x1b[0m",
-  bold:    "\x1b[1m",
-  red:     "\x1b[31m",
-  green:   "\x1b[32m",
-  yellow:  "\x1b[33m",
-  cyan:    "\x1b[36m",
+  reset:  "\x1b[0m",
+  bold:   "\x1b[1m",
+  red:    "\x1b[31m",
+  green:  "\x1b[32m",
+  yellow: "\x1b[33m",
+  cyan:   "\x1b[36m",
 };
+
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function log(msg)  { process.stdout.write(msg + "\n"); }
 function err(msg)  { process.stderr.write(C.red + msg + C.reset + "\n"); }
@@ -34,18 +41,26 @@ function ok(msg)   { log(C.green + "✅ " + msg + C.reset); }
 function info(msg) { log(C.cyan  + "ℹ  " + msg + C.reset); }
 function warn(msg) { log(C.yellow + "⚠  " + msg + C.reset); }
 
-function claudeAvailable() {
-  const r = spawnSync("claude", ["--version"], { encoding: "utf8" });
-  return r.status === 0;
+function settingsPathForScope(scope) {
+  if (scope === "user") {
+    return path.join(os.homedir(), ".claude", "settings.json");
+  }
+  // project scope: .claude/settings.json in cwd
+  return path.join(process.cwd(), ".claude", "settings.json");
 }
 
-function run(cmd, opts = {}) {
+function readSettings(filePath) {
+  if (!fs.existsSync(filePath)) return {};
   try {
-    execSync(cmd, { stdio: "inherit", ...opts });
-    return true;
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch {
-    return false;
+    return {};
   }
+}
+
+function writeSettings(filePath, data) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
 function printUsage() {
@@ -58,8 +73,8 @@ ${C.bold}Usage:${C.reset}
   claude-rate-limit-timer status
 
 ${C.bold}Options:${C.reset}
-  --scope user     Install for all projects (default)
-  --scope project  Install only for the current project
+  --scope user     Register for all projects (default)
+  --scope project  Register only for the current project
 
 ${C.bold}Examples:${C.reset}
   claude-rate-limit-timer install
@@ -68,10 +83,9 @@ ${C.bold}Examples:${C.reset}
 `);
 }
 
-// ── commands ─────────────────────────────────────────────────────────────────
+// ── commands ──────────────────────────────────────────────────────────────────
 
 function cmdInstall(args) {
-  // parse --scope flag
   const scopeIdx = args.indexOf("--scope");
   const scope = scopeIdx !== -1 ? args[scopeIdx + 1] : "user";
 
@@ -80,68 +94,82 @@ function cmdInstall(args) {
     process.exit(1);
   }
 
-  if (!claudeAvailable()) {
-    err("Claude Code CLI not found in PATH.");
-    err("Please install it first: https://claude.ai/download");
-    process.exit(1);
+  const settingsPath = settingsPathForScope(scope);
+  info(`Installing ${C.bold}${PLUGIN_NAME}${C.reset}${C.cyan} (scope=${scope}) …`);
+
+  const settings = readSettings(settingsPath);
+
+  if (!Array.isArray(settings.pluginDirectories)) {
+    settings.pluginDirectories = [];
   }
 
-  info(`Installing ${C.bold}${PLUGIN_NAME}${C.reset}${C.cyan} with scope=${scope} …`);
-
-  const success = run(
-    `claude plugin install "${PLUGIN_ROOT}" --scope ${scope}`
-  );
-
-  if (success) {
-    ok(`Plugin installed! Restart Claude Code to activate it.`);
-    log(`\n  To use: just start Claude Code — the plugin runs automatically.`);
-    log(`  To remove: ${C.bold}claude-rate-limit-timer uninstall${C.reset}\n`);
-  } else {
-    err("Installation failed. Try running manually:");
-    err(`  claude plugin install "${PLUGIN_ROOT}" --scope ${scope}`);
-    process.exit(1);
+  if (settings.pluginDirectories.includes(PLUGIN_ROOT)) {
+    ok(`Plugin is already registered in ${settingsPath}`);
+    return;
   }
+
+  settings.pluginDirectories.push(PLUGIN_ROOT);
+  writeSettings(settingsPath, settings);
+
+  ok(`Plugin installed! Restart Claude Code to activate it.`);
+  log(`\n  Registered: ${C.bold}${PLUGIN_ROOT}${C.reset}`);
+  log(`  Settings:   ${settingsPath}`);
+  log(`\n  To remove: ${C.bold}claude-rate-limit-timer uninstall${C.reset}\n`);
 }
 
 function cmdUninstall() {
-  if (!claudeAvailable()) {
-    err("Claude Code CLI not found in PATH.");
-    process.exit(1);
+  let removed = false;
+
+  // check both scopes
+  for (const scope of ["user", "project"]) {
+    const settingsPath = settingsPathForScope(scope);
+    const settings = readSettings(settingsPath);
+
+    if (!Array.isArray(settings.pluginDirectories)) continue;
+
+    const before = settings.pluginDirectories.length;
+    settings.pluginDirectories = settings.pluginDirectories.filter(
+      (d) => !d.includes(PLUGIN_NAME) && d !== PLUGIN_ROOT
+    );
+
+    if (settings.pluginDirectories.length < before) {
+      writeSettings(settingsPath, settings);
+      info(`Removed from ${settingsPath}`);
+      removed = true;
+    }
   }
 
-  info(`Uninstalling ${C.bold}${PLUGIN_NAME}${C.reset}${C.cyan} …`);
-  const success = run(`claude plugin uninstall ${PLUGIN_NAME}`);
-
-  if (success) {
-    ok("Plugin uninstalled.");
+  if (removed) {
+    ok("Plugin uninstalled. Restart Claude Code to apply.");
   } else {
-    err("Uninstall failed. Try running manually:");
-    err(`  claude plugin uninstall ${PLUGIN_NAME}`);
-    process.exit(1);
+    warn(`Plugin not found in any settings file.`);
   }
 }
 
 function cmdStatus() {
-  if (!claudeAvailable()) {
-    warn("Claude Code CLI not found in PATH — cannot check status.");
-    return;
+  let found = false;
+
+  for (const scope of ["user", "project"]) {
+    const settingsPath = settingsPathForScope(scope);
+    const settings = readSettings(settingsPath);
+
+    if (
+      Array.isArray(settings.pluginDirectories) &&
+      (settings.pluginDirectories.includes(PLUGIN_ROOT) ||
+        settings.pluginDirectories.some((d) => d.includes(PLUGIN_NAME)))
+    ) {
+      ok(`Plugin is installed (${scope} scope) — ${settingsPath}`);
+      found = true;
+    }
   }
 
-  // `claude plugin list` output contains the plugin name if installed
-  try {
-    const out = execSync("claude plugin list", { encoding: "utf8" });
-    if (out.includes(PLUGIN_NAME)) {
-      ok(`Plugin "${PLUGIN_NAME}" is installed.`);
-    } else {
-      warn(`Plugin "${PLUGIN_NAME}" does not appear to be installed.`);
-      info(`Run: claude-rate-limit-timer install`);
-    }
-  } catch {
-    warn("Could not retrieve plugin list. Run: claude plugin list");
+  if (!found) {
+    warn(`Plugin "${PLUGIN_NAME}" is not currently installed.`);
+    info(`Run: claude-rate-limit-timer install`);
   }
 }
 
-// ── main ─────────────────────────────────────────────────────────────────────
+// ── main ──────────────────────────────────────────────────────────────────────
 
 const [, , command, ...rest] = process.argv;
 
