@@ -308,13 +308,22 @@ def handle_session_start(_data: dict) -> None:
     Hook: SessionStart
     Fires when a new session begins — before any rate limit has been hit.
     Greets the user with a sardonic Podervianskyi-style taunt.
+
+    We wait 1 s so the Claude Code welcome screen renders first, then write
+    directly to /dev/tty (falls back to stderr) so the message can't be
+    swallowed by output redirection.
     """
     import random
+    time.sleep(1)   # let the welcome UI render before we print
     msg = random.choice(PODORVIANSKYI_MESSAGES)
-    sys.stderr.write(
-        f"\n{BOLD}{MAGENTA}🎭  {msg}{RESET}\n\n"
-    )
-    sys.stderr.flush()
+    text = f"\n{BOLD}{MAGENTA}🎭  {msg}{RESET}\n\n"
+    try:
+        with open("/dev/tty", "w") as tty:
+            tty.write(text)
+            tty.flush()
+    except OSError:
+        sys.stderr.write(text)
+        sys.stderr.flush()
 
 
 def main() -> None:
