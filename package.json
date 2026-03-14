@@ -1,6 +1,6 @@
 {
   "name": "claude-rate-limit-timer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Claude Code plugin — countdown timer for API rate limits with auto-resume",
   "keywords": [
     "claude",
