@@ -47,6 +47,30 @@ RATE_LIMIT_PATTERNS = [
 DEFAULT_WAIT_SECS = 60   # fallback if we can't parse a reset time
 MAX_WAIT_SECS     = 600  # safety ceiling
 
+# ── Encouraging messages (one printed every 60 s while waiting) ───────────────
+ENCOURAGING_MESSAGES = [
+    "☕  Perfect time for a coffee break — you've earned it.",
+    "💪  Great work so far. Claude will be back before you know it.",
+    "🌟  Every expert was once a beginner. Keep going!",
+    "🚀  Big things take time. Your code is worth the wait.",
+    "🎯  Stay focused — you're closer to done than you think.",
+    "🧠  While we wait: the best code is code that ships. Almost there!",
+    "🌈  Rate limits are just speed bumps, not stop signs.",
+    "🔥  You're on fire today. The API just needs a moment to catch up.",
+    "⚡  Good things come to those who wait (and code well).",
+    "🎉  Fun fact: the first computer bug was an actual moth. Your bugs are classier.",
+    "🌊  Breathe. The API ocean is refilling its waves.",
+    "🏆  Champions wait for rate limits too. You're in good company.",
+    "🎸  If coding were easy, everyone would do it. You've got this.",
+    "🦾  Your patience is a feature, not a bug.",
+    "💡  Use this minute to think about your next move — best code starts in the mind.",
+    "🌙  Even the fastest rockets have to wait on the launchpad sometimes.",
+    "🍀  Luck is what happens when preparation meets opportunity. Keep preparing!",
+    "🎨  Good software is like good art — it takes time to get right.",
+    "🤖  Claude is recharging its neurons. It'll be sharper than ever.",
+    "📈  Every line of code you write is a step toward mastery. Keep stepping.",
+]
+
 
 def _matches_rate_limit(text: str) -> bool:
     if not text:
@@ -113,6 +137,7 @@ def _bar(elapsed: int, total: int, width: int = 30) -> str:
 
 def show_countdown(wait_secs: int) -> None:
     """Block, showing a live countdown in the terminal, then return."""
+    import random
     total = wait_secs
 
     # Banner
@@ -127,15 +152,29 @@ def show_countdown(wait_secs: int) -> None:
 
     signal.signal(signal.SIGINT, _handle_sigint)
 
+    messages = ENCOURAGING_MESSAGES[:]
+    random.shuffle(messages)
+    msg_index        = 0
+    last_msg_at      = -1   # elapsed seconds when last message was printed
+
     start = time.monotonic()
     while True:
-        elapsed  = time.monotonic() - start
+        elapsed   = time.monotonic() - start
         remaining = max(0, total - int(elapsed))
+
+        # Print an encouraging message once per minute (at 0 s, 60 s, 120 s …)
+        minute_mark = int(elapsed) // 60
+        if minute_mark != last_msg_at:
+            last_msg_at = minute_mark
+            msg = messages[msg_index % len(messages)]
+            msg_index += 1
+            sys.stderr.write(f"\r{' ' * 70}\r")   # clear the timer line
+            sys.stderr.write(f"{YELLOW}   {msg}{RESET}\n")
+            sys.stderr.flush()
 
         mins, secs = divmod(remaining, 60)
         bar_str    = _bar(int(elapsed), total)
 
-        eta = datetime.now(timezone.utc).replace(microsecond=0)
         line = (
             f"{CLEAR_LINE}"
             f"{CYAN}⏱  {BOLD}{mins:02d}:{secs:02d}{RESET}{CYAN} remaining  "
